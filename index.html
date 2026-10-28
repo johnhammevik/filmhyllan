@@ -2,7 +2,7 @@
 <html lang="sv">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#163d35">
+<meta name="theme-color" content="#f8f9fc">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Filmhyllan">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -10,14 +10,18 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/png" href="icon-192.png">
-<link rel="stylesheet" href="style.css?v=11">
-<script defer src="pwa.js?v=11"></script>
-<script type="module" src="app.js?v=11"></script>
-<header><span class="brand">▤ Filmhyllan</span><span>Din egen lilla biograf.</span></header>
+<link rel="stylesheet" href="design.css?v=12">
+<script defer src="pwa.js?v=12"></script>
+<script type="module" src="app.js?v=12"></script>
+<svg class="icon-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
+<symbol id="i-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></symbol>
+<symbol id="i-add" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M4 8h16M12 11v7m-3-3h6"/></symbol>
+<symbol id="i-scan" viewBox="0 0 24 24"><path d="M8 3H4a1 1 0 0 0-1 1v4m13-5h4a1 1 0 0 1 1 1v4M3 16v4a1 1 0 0 0 1 1h4m8 0h4a1 1 0 0 0 1-1v-4M7 9v6m3-8v10m4-10v10m3-8v6"/></symbol>
+<symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/></symbol>
+<symbol id="i-film" viewBox="0 0 24 24"><path d="M3 9h18v12H3zM3 9 2 4l18-3 1 5zM7 3l3 4m4-5 3 4M8 13h8m-8 4h5"/></symbol>
+</defs></svg><header class="app-header"><a class="brand" href="./"><svg class="icon" aria-hidden="true"><use href="#i-film"></use></svg><span>Filmhyllan</span></a><button id="open-account" class="avatar" type="button" aria-label="Mitt konto"><svg class="icon" aria-hidden="true"><use href="#i-user"></use></svg></button></header>
 <main>
-  <p class="eyebrow">DIN SAMLING, DIN HISTORIA</p>
-  <h1>Alla dina filmer.<br>En egen hylla.</h1>
-  <p class="intro">Samla dina DVD-, Blu-ray- och 4K-filmer på ett ställe.</p>
   <aside id="install-panel" class="install-panel" aria-label="Installera Filmhyllan" hidden>
     <button id="install-app" type="button" hidden>Lägg till på hemskärmen</button>
     <details id="install-help"><summary>Ha Filmhyllan på hemskärmen</summary>
@@ -39,18 +43,24 @@
     <p class="hint">Använd minst 8 tecken när du skapar konto. Du kan behöva bekräfta din e-post innan du loggar in.</p>
   </section>
   <section id="collection" hidden>
-    <div class="account"><span id="account-email"></span><button id="logout" class="secondary">Logga ut</button></div>
-    <section class="panel" aria-labelledby="scan-heading">
+    <div class="collection-search">
+      <label><span class="sr-only">Sök i min samling</span><input id="collection-query" type="search" maxlength="200" autocomplete="off" placeholder="Sök i din filmsamling…" aria-describedby="collection-search-help"></label>
+      <button id="clear-collection-query" type="button" class="secondary" hidden>Rensa sökning</button>
+      <p id="collection-search-help" class="sr-only">Sök bland dina sparade filmer och serier.</p>
+    </div>
+<div id="format-tabs" class="format-tabs" role="group" aria-label="Filtrera på format"><button type="button" data-format="all" aria-pressed="true">Alla</button><button type="button" data-format="DVD" aria-pressed="false">DVD</button><button type="button" data-format="Blu-ray" aria-pressed="false">Blu-ray</button><button type="button" data-format="4K" aria-pressed="false">4K</button></div>
+<dialog id="account-dialog" class="sheet"><div class="sheet-header"><h2>Mitt konto</h2><button type="button" class="close-sheet" data-close="account-dialog" aria-label="Stäng">×</button></div>    <div class="account"><span id="account-email"></span><button id="logout" class="secondary">Logga ut</button></div></dialog>
+<dialog id="scan-dialog" class="sheet"><div class="sheet-header"><h2>Skanna streckkod</h2><button type="button" class="close-sheet" data-close="scan-dialog" aria-label="Stäng">×</button></div>    <section class="panel" aria-labelledby="scan-heading">
       <h2 id="scan-heading">Skanna filmens streckkod</h2>
-      <button id="scan-start" type="button">Öppna kameran</button>
+      <button id="scan-start" type="button" hidden>Öppna kameran</button>
       <div id="scan-panel" hidden>
         <video id="scan-video" playsinline muted aria-label="Kamerabild för streckkodsläsning"></video>
         <button id="scan-stop" type="button" class="secondary">Stäng kameran</button>
       </div>
       <p id="scan-status" role="status" aria-live="polite"></p>
       <p class="hint">Vi söker först efter streckkoden i din privata samling. Saknas den där försöker vi med produktuppslaget. Du kan alltid söka på titeln manuellt. Kamerabilden behandlas i webbläsaren; en okänd streckkod kan skickas till UPCitemdb.</p>
-    </section>
-    <section class="panel" aria-labelledby="search-heading">
+    </section></dialog>
+<dialog id="search-dialog" class="sheet"><div class="sheet-header"><h2>Sök på TMDB</h2><button type="button" class="close-sheet" data-close="search-dialog" aria-label="Stäng">×</button></div>    <section class="panel" aria-labelledby="search-heading">
       <h2 id="search-heading">Hitta film, serie och affisch</h2>
       <form id="search-form">
         <label>Filmtitel<input id="query" type="search" minlength="2" maxlength="100" required placeholder="Till exempel Alien"></label>
@@ -59,8 +69,8 @@
       <p id="search-status" role="status" aria-live="polite"></p>
       <ul id="search-results" aria-label="Filmförslag"></ul>
       <p class="hint">Välj rätt film och kontrollera årtalet. Affischen kan skilja sig från omslaget på din utgåva.</p>
-    </section>
-    <form id="movie-form" class="panel">
+    </section></dialog>
+<dialog id="add-dialog" class="sheet"><div class="sheet-header"><h2>Lägg till på hyllan</h2><button type="button" class="close-sheet" data-close="add-dialog" aria-label="Stäng">×</button></div>    <form id="movie-form" class="panel">
       <h2>Lägg till på hyllan</h2>
       <div id="selection" hidden><div id="selected-info"></div><button id="clear-selection" type="button" class="secondary">Registrera manuellt i stället</button></div>
       <label>Filmtitel<input id="title" maxlength="300" required placeholder="Till exempel Interstellar"></label>
@@ -72,20 +82,17 @@
       <label>Streckkod (valfritt)<input id="barcode" type="text" inputmode="numeric" maxlength="14" pattern="[0-9]{8}|[0-9]{12}|[0-9]{13}|[0-9]{14}" placeholder="Skanna eller skriv numret"></label>
       <button id="lookup-barcode" type="button" class="secondary">Hitta titel från streckkod</button>
       <button>Spara film</button>
-    </form>
-    <div class="shelf-heading"><h2>Min filmhylla</h2><span id="count"></span></div>
-    <div class="collection-search">
-      <label>Sök i min samling<input id="collection-query" type="search" maxlength="200" autocomplete="off" placeholder="Skriv hela eller delar av en titel" aria-describedby="collection-search-help"></label>
-      <button id="clear-collection-query" type="button" class="secondary" hidden>Rensa sökning</button>
-      <p id="collection-search-help" class="hint">Söker direkt bland dina sparade filmer och serier. Välj Alla kategorier för att söka i hela samlingen.</p>
-    </div>
+    </form></dialog>
+<section id="home-shelves"><div class="shelf-heading"><h2>Senast tillagda</h2><button id="show-all-recent" type="button" class="text-button">Visa alla</button></div><ul id="recent-movies" class="poster-row"></ul><div id="category-shelves"></div></section><div id="results-heading" class="shelf-heading"><h2>Min samling</h2><span id="count" role="status" aria-live="polite"></span></div>
+
     <label class="category-filter-label">Visa kategori<select id="category-filter"><option value="all">Alla kategorier</option><option value="none">Utan kategori</option></select></label>
     <p id="empty" hidden>Din hylla väntar på sin första film. Lägg till den ovan.</p>
     <ul id="movies"></ul>
+<nav id="bottom-nav" class="bottom-nav" aria-label="Huvudmeny"><button id="nav-home" class="active" type="button"><svg class="icon" aria-hidden="true"><use href="#i-home"></use></svg><span>Hem</span></button><button id="nav-add" type="button"><svg class="icon" aria-hidden="true"><use href="#i-add"></use></svg><span>Lägg till</span></button><button id="nav-scan" class="scan-nav" type="button"><span class="scan-circle"><svg class="icon" aria-hidden="true"><use href="#i-scan"></use></svg></span><span>Skanna</span></button><button id="nav-search" type="button"><svg class="icon" aria-hidden="true"><use href="#i-search"></use></svg><span>Sök</span></button><button id="nav-account" type="button"><svg class="icon" aria-hidden="true"><use href="#i-user"></use></svg><span>Konto</span></button></nav>
   </section>
   <noscript>Aktivera JavaScript för att använda Filmhyllan.</noscript>
 </main>
-<footer>Filmhyllan · Version 11
+<footer>Filmhyllan · Version 12
   <details><summary>Om Filmhyllan och filmuppgifterna</summary>
     <p>Filmuppgifter och affischer hämtas från <a href="https://www.themoviedb.org/">TMDB</a>.</p>
     <a href="https://www.themoviedb.org/"><img class="tmdb-logo" alt="TMDB" width="100" src="https://www.themoviedb.org/assets/2/v4/logos/v2/blue_short-8e7b30f73a4020692ccca9c88bafe5dcb6f8a62a4c6bc55cd9ba82bb2cd95f6c.svg"></a>

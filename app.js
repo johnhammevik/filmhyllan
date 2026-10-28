@@ -1,5 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4';
-import { createScanner, validBarcode } from './scanner.js?v=11';
+import { createScanner, validBarcode } from './scanner.js?v=12';
 
 const db = createClient('https://ncaffkxwowxytabemdra.supabase.co', 'sb_publishable_TL6D3152G-tkGQXsmUlDAQ_Z1DhMdm8');
 const $ = id => document.getElementById(id);
@@ -8,6 +8,80 @@ let generation = 0;
 let selectedMovie = null;
 let searchVersion = 0;
 let movieRows = [];
+let selectedFormat = 'all';
+let browseAll = false;
+function openPanel(id) {
+  if (!user) { $('email').focus(); return; }
+  for (const name of ['scan-dialog', 'search-dialog', 'add-dialog', 'account-dialog']) {
+    if (name !== id && $(name).open) $(name).close();
+  }
+  if (!$(id).open) $(id).showModal();
+}
+function showHome() {
+  browseAll = false;
+  $('collection-query').value = '';
+  $('category-filter').value = 'all';
+  renderMovies();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+$('nav-home').onclick = showHome;
+$('nav-add').onclick = () => openPanel('add-dialog');
+$('nav-search').onclick = () => { openPanel('search-dialog'); $('query').focus(); };
+$('open-account').onclick = $('nav-account').onclick = () => openPanel('account-dialog');
+$('nav-scan').onclick = () => { if (user) { openPanel('scan-dialog'); scanner.start(); } };
+for (const button of document.querySelectorAll('[data-close]')) button.onclick = () => $(button.dataset.close).close();
+for (const name of ['scan-dialog', 'search-dialog', 'add-dialog', 'account-dialog']) {
+  $(name).addEventListener('close', () => { if (name === 'scan-dialog') scanner.stop(); });
+}
+for (const button of document.querySelectorAll('[data-format]')) button.onclick = () => {
+  selectedFormat = button.dataset.format;
+  for (const tab of document.querySelectorAll('[data-format]')) tab.setAttribute('aria-pressed', String(tab === button));
+  renderMovies();
+};
+$('show-all-recent').onclick = () => { browseAll = true; renderMovies(); };
+function previewTile(movie) {
+  const li = document.createElement('li');
+  const button = document.createElement('button');
+  button.className = 'poster-tile'; button.type = 'button';
+  const name = document.createElement('strong'); name.textContent = movie.title;
+  const subtitle = document.createElement('span'); subtitle.textContent = movie.format;
+  button.append(poster(movie.poster_path, movie.title), name, subtitle);
+  button.onclick = () => {
+    browseAll = true;
+    $('collection-query').value = movie.title;
+    $('category-filter').value = 'all';
+    renderMovies();
+    $('results-heading').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  li.append(button);
+  return li;
+}
+function renderShelves(rows) {
+  $('recent-movies').replaceChildren();
+  for (const movie of rows.slice(0, 9)) $('recent-movies').append(previewTile(movie));
+  $('category-shelves').replaceChildren();
+  const groups = new Map();
+  for (const movie of rows) {
+    const name = categoryText(movie.category) || 'Min samling';
+    const key = movie.category ? `category:${categoryKey(name)}` : 'uncategorized';
+    if (!groups.has(key)) groups.set(key, { name, movies: [] });
+    groups.get(key).movies.push(movie);
+  }
+  for (const group of groups.values()) {
+    const section = document.createElement('section');
+    const heading = document.createElement('div'); heading.className = 'shelf-heading';
+    const title = document.createElement('h2'); title.textContent = group.name;
+    const all = document.createElement('button'); all.className = 'text-button'; all.type = 'button'; all.textContent = 'Visa alla';
+    all.onclick = () => {
+      browseAll = true;
+      $('category-filter').value = group.movies[0].category ? `category:${categoryKey(group.movies[0].category)}` : 'none';
+      renderMovies();
+    };
+    const row = document.createElement('ul'); row.className = 'poster-row';
+    for (const movie of group.movies.slice(0, 12)) row.append(previewTile(movie));
+    heading.append(title, all); section.append(heading, row); $('category-shelves').append(section);
+  }
+}
 function categoryText(value) {
   return String(value || '').normalize('NFC').trim().replace(/\s+/g, ' ');
 }
@@ -55,6 +129,7 @@ const scanner = createScanner({
     $('search-status').textContent = '';
     $('barcode').value = code;
     $('scan-status').textContent = `Streckkod läst: ${code}. Söker efter titeln…`;
+    openPanel('search-dialog');
     searchTitles({ barcode: code });
   },
 });
@@ -82,6 +157,7 @@ function clearSelection() {
   $('selected-info').replaceChildren();
 }
 function message(text, error = false) {
+  $('status').hidden = false;
   $('status').textContent = text;
   $('status').classList.toggle('error', error);
 }
@@ -116,9 +192,15 @@ function renderMovies() {
   const normalize = value => String(value || '').normalize('NFD').replace(/\p{M}/gu, '').toLocaleLowerCase('sv');
   const terms = normalize($('collection-query').value).trim().split(/\s+/).filter(Boolean);
   const visible = movieRows.filter(movie =>
+    (selectedFormat === 'all' || movie.format === selectedFormat) &&
     (filter === 'all' || (filter === 'none' ? !categoryText(movie.category) : `category:${categoryKey(movie.category)}` === filter)) &&
     terms.every(term => normalize(movie.title).includes(term)));
   $('clear-collection-query').hidden = !$('collection-query').value;
+  const home = !browseAll && !terms.length && filter === 'all';
+  $('home-shelves').hidden = !home;
+  $('results-heading').hidden = home;
+  $('movies').hidden = home;
+  renderShelves(movieRows.filter(movie => selectedFormat === 'all' || movie.format === selectedFormat));
   $('movies').replaceChildren();
   $('empty').hidden = visible.length !== 0;
   $('empty').textContent = !movieRows.length ? 'Din hylla väntar på sin första film. Lägg till den ovan.'
@@ -273,6 +355,12 @@ async function showSession(session) {
   $('barcode').value = '';
   generation++;
   movieRows = [];
+  browseAll = false;
+  selectedFormat = 'all';
+  for (const tab of document.querySelectorAll('[data-format]')) tab.setAttribute('aria-pressed', String(tab.dataset.format === 'all'));
+  for (const name of ['scan-dialog', 'search-dialog', 'add-dialog', 'account-dialog']) if ($(name).open) $(name).close();
+  $('recent-movies').replaceChildren();
+  $('category-shelves').replaceChildren();
   $('collection-query').value = '';
   $('clear-collection-query').hidden = true;
   $('category').value = '';
@@ -295,7 +383,7 @@ async function showSession(session) {
   $('movie-form').reset();
   message(user ? 'Hämtar din filmhylla…' : 'Logga in eller skapa ett konto för att börja.');
   if (user) {
-    try { await loadMovies(); message('Din filmhylla är redo.'); }
+    try { await loadMovies(); message('Din filmhylla är redo.'); $('status').hidden = true; }
     catch (e) { message(`Kunde inte hämta filmer: ${e.message}`, true); }
   }
 }
@@ -332,6 +420,7 @@ $('movie-form').onsubmit = event => {
     $('category-filter').value = 'all';
     $('collection-query').value = '';
     await loadMovies();
+    if ($('add-dialog').open) $('add-dialog').close();
     message('Filmen har sparats.');
   });
 };
@@ -393,6 +482,7 @@ function searchTitles(body) {
         choose.setAttribute('aria-label', `Välj ${name.textContent}`);
         choose.onclick = () => {
           selectedMovie = movie;
+          openPanel('add-dialog');
           $('title').value = movie.title;
           $('media-type').value = movie.media_type === 'tv' ? 'tv' : 'movie';
           const label = document.createElement('p');

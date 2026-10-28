@@ -1,6 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4';
-import { createScanner, validBarcode } from './scanner.js?v=8';
-import { createCoverReader } from './cover-reader.js?v=8';
+import { createScanner, validBarcode } from './scanner.js?v=9';
+import { createCoverReader } from './cover-reader.js?v=9';
 
 const db = createClient('https://ncaffkxwowxytabemdra.supabase.co', 'sb_publishable_TL6D3152G-tkGQXsmUlDAQ_Z1DhMdm8');
 const $ = id => document.getElementById(id);
@@ -119,20 +119,35 @@ async function busy(form, action) {
 async function loadMovies() {
   if (!user) return;
   const current = generation;
-  const { data, error } = await db.from('movies').select('id,title,format,poster_path,barcode,media_type,category').eq('user_id', user.id).order('created_at', { ascending: false });
-  if (current !== generation) return;
-  if (error) throw error;
-  movieRows = data;
+  const owner = user.id;
+  const all = [];
+  const pageSize = 500;
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await db.from('movies').select('id,title,format,poster_path,barcode,media_type,category')
+      .eq('user_id', owner).order('created_at', { ascending: false }).order('id', { ascending: false })
+      .range(offset, offset + pageSize - 1);
+    if (current !== generation) return;
+    if (error) throw error;
+    all.push(...data);
+    if (data.length < pageSize) break;
+  }
+  movieRows = all;
   updateCategoryOptions();
   renderMovies();
 }
 function renderMovies() {
   const filter = $('category-filter').value || 'all';
-  const visible = movieRows.filter(movie => filter === 'all' || (filter === 'none' ? !categoryText(movie.category) : `category:${categoryKey(movie.category)}` === filter));
+  const normalize = value => String(value || '').normalize('NFD').replace(/\p{M}/gu, '').toLocaleLowerCase('sv');
+  const terms = normalize($('collection-query').value).trim().split(/\s+/).filter(Boolean);
+  const visible = movieRows.filter(movie =>
+    (filter === 'all' || (filter === 'none' ? !categoryText(movie.category) : `category:${categoryKey(movie.category)}` === filter)) &&
+    terms.every(term => normalize(movie.title).includes(term)));
+  $('clear-collection-query').hidden = !$('collection-query').value;
   $('movies').replaceChildren();
   $('empty').hidden = visible.length !== 0;
-  $('empty').textContent = movieRows.length ? 'Inga filmer i den här kategorin.' : 'Din hylla väntar på sin första film. Lägg till den ovan.';
-  $('count').textContent = filter === 'all' ? `${movieRows.length} filmer` : `${visible.length} av ${movieRows.length} filmer`;
+  $('empty').textContent = !movieRows.length ? 'Din hylla väntar på sin första film. Lägg till den ovan.'
+    : terms.length ? 'Ingen titel matchar sökningen. Prova färre ord eller välj Alla kategorier.' : 'Inga filmer i den här kategorin.';
+  $('count').textContent = filter === 'all' && !terms.length ? `${movieRows.length} filmer` : `${visible.length} av ${movieRows.length} filmer`;
   for (const movie of visible) {
     const li = document.createElement('li');
     const title = document.createElement('h3');
@@ -200,6 +215,12 @@ function renderMovies() {
   }
 }
 $('category-filter').onchange = renderMovies;
+$('collection-query').oninput = renderMovies;
+$('clear-collection-query').onclick = () => {
+  $('collection-query').value = '';
+  renderMovies();
+  $('collection-query').focus();
+};
 async function showSession(session) {
   // Token refreshes must not clear an in-progress form or search.
   if (user && session?.user?.id === user.id) return;
@@ -209,6 +230,8 @@ async function showSession(session) {
   $('barcode').value = '';
   generation++;
   movieRows = [];
+  $('collection-query').value = '';
+  $('clear-collection-query').hidden = true;
   $('category').value = '';
   $('category-filter').value = 'all';
   updateCategoryOptions();
@@ -262,6 +285,7 @@ $('movie-form').onsubmit = event => {
     clearSelection();
     $('scan-status').textContent = '';
     $('category-filter').value = 'all';
+    $('collection-query').value = '';
     await loadMovies();
     message('Filmen har sparats.');
   });

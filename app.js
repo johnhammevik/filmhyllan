@@ -1,5 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4';
-import { createScanner, validBarcode } from './scanner.js?v=3';
+import { createScanner, validBarcode } from './scanner.js?v=4';
 
 const db = createClient('https://ncaffkxwowxytabemdra.supabase.co', 'sb_publishable_TL6D3152G-tkGQXsmUlDAQ_Z1DhMdm8');
 const $ = id => document.getElementById(id);
@@ -19,8 +19,8 @@ const scanner = createScanner({
     $('search-results').replaceChildren();
     $('search-status').textContent = '';
     $('barcode').value = code;
-    $('scan-status').textContent = `Streckkod läst: ${code}. Sök nu på filmens titel nedan.`;
-    $('query').focus();
+    $('scan-status').textContent = `Streckkod läst: ${code}. Söker efter titeln…`;
+    searchTitles({ barcode: code });
   },
 });
 $('scan-start').onclick = () => { if (user) scanner.start(); };
@@ -60,7 +60,7 @@ async function busy(form, action) {
 async function loadMovies() {
   if (!user) return;
   const current = generation;
-  const { data, error } = await db.from('movies').select('id,title,format,poster_path,barcode').eq('user_id', user.id).order('created_at', { ascending: false });
+  const { data, error } = await db.from('movies').select('id,title,format,poster_path,barcode,media_type').eq('user_id', user.id).order('created_at', { ascending: false });
   if (current !== generation) return;
   if (error) throw error;
   $('movies').replaceChildren();
@@ -71,7 +71,7 @@ async function loadMovies() {
     const title = document.createElement('h3');
     title.textContent = movie.title;
     const format = document.createElement('div');
-    format.textContent = movie.format;
+    format.textContent = `${movie.format} · ${movie.media_type === 'tv' ? 'Serie' : 'Film'}`;
     const remove = document.createElement('button');
     remove.className = 'secondary';
     remove.textContent = 'Ta bort';
@@ -145,7 +145,7 @@ $('movie-form').onsubmit = event => {
     const barcode = $('barcode').value.trim();
     if (barcode && !validBarcode(barcode)) throw new Error('Kontrollera streckkoden. Skriv alla siffror, även inledande nollor.');
     const current = generation;
-    const { error } = await db.from('movies').insert({ title, format: $('format').value, user_id: user.id, tmdb_id: selectedMovie?.id || null, poster_path: selectedMovie?.poster_path || null, barcode: barcode || null });
+    const { error } = await db.from('movies').insert({ title, format: $('format').value, user_id: user.id, tmdb_id: selectedMovie?.id || null, poster_path: selectedMovie?.poster_path || null, barcode: barcode || null, media_type: selectedMovie?.media_type || $('media-type').value });
     if (current !== generation) return;
     if (error) throw error;
     $('movie-form').reset();
@@ -161,16 +161,27 @@ $('clear-selection').onclick = () => {
   $('title').focus();
 };
 $('title').addEventListener('input', clearSelection);
+$('media-type').addEventListener('change', clearSelection);
 $('search-form').onsubmit = event => {
   event.preventDefault();
+  searchTitles({ query: $('query').value.trim() });
+};
+$('lookup-barcode').onclick = () => {
+  const barcode = $('barcode').value.trim();
+  if (!validBarcode(barcode)) { message('Skriv eller skanna en giltig streckkod först.', true); return; }
+  clearSelection();
+  $('title').value = '';
+  searchTitles({ barcode });
+};
+function searchTitles(body) {
   const current = ++searchVersion;
   const accountGeneration = generation;
-  busy($('search-form'), async () => {
+  return busy($('search-form'), async () => {
     if (!user) throw new Error('Logga in för att söka.');
     $('search-results').replaceChildren();
-    $('search-status').textContent = 'Söker efter filmer…';
+    $('search-status').textContent = body.barcode ? 'Slår upp streckkoden och söker efter film eller serie…' : 'Söker efter filmer och serier…';
     try {
-      const { data, error } = await db.functions.invoke('tmdb-search', { body: { query: $('query').value.trim() } });
+      const { data, error } = await db.functions.invoke('tmdb-search', { body });
       if (current !== searchVersion || accountGeneration !== generation) return;
       if (error) {
         let detail = '';
@@ -179,13 +190,20 @@ $('search-form').onsubmit = event => {
       }
       if (data?.error) throw new Error(data.error);
       if (!Array.isArray(data?.results)) throw new Error('Sökningen gav ett oväntat svar.');
-      $('search-status').textContent = data.results.length ? `${data.results.length} filmförslag. Välj rätt film nedan.` : 'Ingen träff. Prova en annan titel eller registrera filmen manuellt nedan.';
+      if (body.barcode) {
+        $('scan-status').textContent = data.product
+          ? `Produkt: ${data.product.title} (källa: ${data.product.source}). Kontrollera att förslaget stämmer.`
+          : data.lookup_message || 'Ingen produkttitel hittades. Sök på titeln manuellt.';
+        if (data.query) $('query').value = data.query;
+        if (['DVD', 'Blu-ray', '4K'].includes(data.product?.format)) $('format').value = data.product.format;
+      }
+      $('search-status').textContent = data.results.length ? `${data.results.length} förslag. Välj rätt film eller serie nedan.` : data.lookup_message || 'Ingen träff. Prova en annan titel eller registrera manuellt nedan.';
       for (const movie of data.results) {
         if (!Number.isInteger(movie.id) || typeof movie.title !== 'string') continue;
         const li = document.createElement('li');
         const name = document.createElement('h3');
         const year = /^\d{4}/.exec(movie.release_date || '')?.[0];
-        name.textContent = `${movie.title}${year ? ` (${year})` : ''}`;
+        name.textContent = `${movie.title}${year ? ` (${year})` : ''} · ${movie.media_type === 'tv' ? 'Serie' : 'Film'}`;
         const choose = document.createElement('button');
         choose.type = 'button';
         choose.textContent = 'Välj film';
@@ -193,6 +211,7 @@ $('search-form').onsubmit = event => {
         choose.onclick = () => {
           selectedMovie = movie;
           $('title').value = movie.title;
+          $('media-type').value = movie.media_type === 'tv' ? 'tv' : 'movie';
           const label = document.createElement('p');
           label.textContent = `Vald film: ${name.textContent}`;
           $('selected-info').replaceChildren(poster(movie.poster_path, movie.title), label);
@@ -207,10 +226,11 @@ $('search-form').onsubmit = event => {
     } catch (e) {
       if (current === searchVersion && accountGeneration === generation) {
         $('search-status').textContent = e.message;
+        if (body.barcode) $('scan-status').textContent = 'Koden är läst, men uppslaget misslyckades. Sök på titeln manuellt eller prova igen.';
       }
     }
   });
-};
+}
 $('logout').onclick = () => busy($('collection'), async () => {
   const { error } = await db.auth.signOut({ scope: 'local' });
   if (error) throw error;

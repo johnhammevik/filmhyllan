@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4';
+import { createScanner, validBarcode } from './scanner.js?v=3';
 
 const db = createClient('https://ncaffkxwowxytabemdra.supabase.co', 'sb_publishable_TL6D3152G-tkGQXsmUlDAQ_Z1DhMdm8');
 const $ = id => document.getElementById(id);
@@ -6,6 +7,26 @@ let user = null;
 let generation = 0;
 let selectedMovie = null;
 let searchVersion = 0;
+const scanner = createScanner({
+  video: $('scan-video'), panel: $('scan-panel'), startButton: $('scan-start'),
+  onMessage: text => { $('scan-status').textContent = text; },
+  onScan: code => {
+    if (!user) return;
+    clearSelection();
+    searchVersion++;
+    $('title').value = '';
+    $('query').value = '';
+    $('search-results').replaceChildren();
+    $('search-status').textContent = '';
+    $('barcode').value = code;
+    $('scan-status').textContent = `Streckkod läst: ${code}. Sök nu på filmens titel nedan.`;
+    $('query').focus();
+  },
+});
+$('scan-start').onclick = () => { if (user) scanner.start(); };
+$('scan-stop').onclick = () => { scanner.stop(); $('scan-status').textContent = 'Kameran är avstängd.'; };
+window.addEventListener('pagehide', () => scanner.stop());
+document.addEventListener('visibilitychange', () => { if (document.hidden) scanner.stop(); });
 function poster(path, title) {
   const box = document.createElement('div');
   box.className = 'poster';
@@ -39,7 +60,7 @@ async function busy(form, action) {
 async function loadMovies() {
   if (!user) return;
   const current = generation;
-  const { data, error } = await db.from('movies').select('id,title,format,poster_path').eq('user_id', user.id).order('created_at', { ascending: false });
+  const { data, error } = await db.from('movies').select('id,title,format,poster_path,barcode').eq('user_id', user.id).order('created_at', { ascending: false });
   if (current !== generation) return;
   if (error) throw error;
   $('movies').replaceChildren();
@@ -66,12 +87,21 @@ async function loadMovies() {
       });
     };
     li.append(poster(movie.poster_path, movie.title), title, format, remove);
+    if (movie.barcode) {
+      const code = document.createElement('small');
+      code.className = 'barcode-label';
+      code.textContent = `Streckkod: ${movie.barcode}`;
+      li.append(code);
+    }
     $('movies').append(li);
   }
 }
 async function showSession(session) {
   // Token refreshes must not clear an in-progress form or search.
   if (user && session?.user?.id === user.id) return;
+  scanner.stop();
+  $('scan-status').textContent = '';
+  $('barcode').value = '';
   generation++;
   searchVersion++;
   clearSelection();
@@ -112,12 +142,15 @@ $('movie-form').onsubmit = event => {
     if (!user) throw new Error('Logga in igen.');
     const title = $('title').value.trim();
     if (!title) throw new Error('Skriv en filmtitel.');
+    const barcode = $('barcode').value.trim();
+    if (barcode && !validBarcode(barcode)) throw new Error('Kontrollera streckkoden. Skriv alla siffror, även inledande nollor.');
     const current = generation;
-    const { error } = await db.from('movies').insert({ title, format: $('format').value, user_id: user.id, tmdb_id: selectedMovie?.id || null, poster_path: selectedMovie?.poster_path || null });
+    const { error } = await db.from('movies').insert({ title, format: $('format').value, user_id: user.id, tmdb_id: selectedMovie?.id || null, poster_path: selectedMovie?.poster_path || null, barcode: barcode || null });
     if (current !== generation) return;
     if (error) throw error;
     $('movie-form').reset();
     clearSelection();
+    $('scan-status').textContent = '';
     await loadMovies();
     message('Filmen har sparats.');
   });

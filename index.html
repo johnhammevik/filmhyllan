@@ -4,8 +4,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#163d35">
 <title>Filmhyllan</title>
-<link rel="stylesheet" href="style.css?v=2">
-<script type="module" src="app.js?v=2"></script>
+<link rel="stylesheet" href="style.css?v=3">
+<script type="module" src="app.js?v=3"></script>
 <header><span class="brand">▤ Filmhyllan</span><span>Din egen lilla biograf.</span></header>
 <main>
   <p class="eyebrow">DIN SAMLING, DIN HISTORIA</p>
@@ -23,6 +23,16 @@
   </section>
   <section id="collection" hidden>
     <div class="account"><span id="account-email"></span><button id="logout" class="secondary">Logga ut</button></div>
+    <section class="panel" aria-labelledby="scan-heading">
+      <h2 id="scan-heading">Skanna filmens streckkod</h2>
+      <button id="scan-start" type="button">Öppna kameran</button>
+      <div id="scan-panel" hidden>
+        <video id="scan-video" playsinline muted aria-label="Kamerabild för streckkodsläsning"></video>
+        <button id="scan-stop" type="button" class="secondary">Stäng kameran</button>
+      </div>
+      <p id="scan-status" role="status" aria-live="polite"></p>
+      <p class="hint">I detta steg läser kameran numret. Sök sedan på filmtiteln nedan och välj rätt film. Kamerabilden behandlas i webbläsaren och laddas inte upp.</p>
+    </section>
     <section class="panel" aria-labelledby="search-heading">
       <h2 id="search-heading">Hitta film och affisch</h2>
       <form id="search-form">
@@ -38,6 +48,7 @@
       <div id="selection" hidden><div id="selected-info"></div><button id="clear-selection" type="button" class="secondary">Registrera manuellt i stället</button></div>
       <label>Filmtitel<input id="title" maxlength="300" required placeholder="Till exempel Interstellar"></label>
       <label>Format<select id="format"><option>DVD</option><option>Blu-ray</option><option>4K</option></select></label>
+      <label>Streckkod (valfritt)<input id="barcode" type="text" inputmode="numeric" maxlength="14" pattern="[0-9]{8}|[0-9]{12}|[0-9]{13}|[0-9]{14}" placeholder="Skanna eller skriv numret"></label>
       <button>Spara film</button>
     </form>
     <div class="shelf-heading"><h2>Min filmhylla</h2><span id="count"></span></div>
@@ -46,11 +57,12 @@
   </section>
   <noscript>Aktivera JavaScript för att använda Filmhyllan.</noscript>
 </main>
-<footer>Filmhyllan · Version 2
+<footer>Filmhyllan · Version 3
   <details><summary>Om Filmhyllan och filmuppgifterna</summary>
     <p>Filmuppgifter och affischer hämtas från <a href="https://www.themoviedb.org/">TMDB</a>.</p>
     <a href="https://www.themoviedb.org/"><img class="tmdb-logo" alt="TMDB" width="100" src="https://www.themoviedb.org/assets/2/v4/logos/v2/blue_short-8e7b30f73a4020692ccca9c88bafe5dcb6f8a62a4c6bc55cd9ba82bb2cd95f6c.svg"></a>
     <p lang="en">This product uses the TMDB API but is not endorsed or certified by TMDB.</p>
+    <p>Streckkodsläsning med <a href="https://github.com/zxing-js/browser">ZXing Browser</a> (MIT-licens).</p>
   </details>
 </footer>
 </html>

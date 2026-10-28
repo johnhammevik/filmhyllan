@@ -1,6 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4';
-import { createScanner, validBarcode } from './scanner.js?v=9';
-import { createCoverReader } from './cover-reader.js?v=9';
+import { createScanner, validBarcode } from './scanner.js?v=10';
+import { createCoverReader } from './cover-reader.js?v=10';
 
 const db = createClient('https://ncaffkxwowxytabemdra.supabase.co', 'sb_publishable_TL6D3152G-tkGQXsmUlDAQ_Z1DhMdm8');
 const $ = id => document.getElementById(id);
@@ -149,6 +149,8 @@ function renderMovies() {
     : terms.length ? 'Ingen titel matchar sökningen. Prova färre ord eller välj Alla kategorier.' : 'Inga filmer i den här kategorin.';
   $('count').textContent = filter === 'all' && !terms.length ? `${movieRows.length} filmer` : `${visible.length} av ${movieRows.length} filmer`;
   for (const movie of visible) {
+    const cardGeneration = generation;
+    const cardOwner = user?.id;
     const li = document.createElement('li');
     const title = document.createElement('h3');
     title.textContent = movie.title;
@@ -205,6 +207,72 @@ function renderMovies() {
     };
     edit.append(summary, form);
     li.append(categoryBadge, edit);
+    const movieEdit = document.createElement('details');
+    movieEdit.className = 'movie-edit';
+    const editSummary = document.createElement('summary');
+    editSummary.textContent = 'Redigera film';
+    const editForm = document.createElement('form');
+    function field(text, element) {
+      const label = document.createElement('label');
+      label.textContent = text;
+      label.append(element);
+      editForm.append(label);
+      return element;
+    }
+    const editTitle = field('Titel', document.createElement('input'));
+    editTitle.type = 'text'; editTitle.required = true; editTitle.maxLength = 300;
+    const editFormat = field('Format', document.createElement('select'));
+    for (const name of ['DVD', 'Blu-ray', '4K']) {
+      const option = document.createElement('option');
+      option.value = name; option.textContent = name; editFormat.append(option);
+    }
+    const editBarcode = field('Streckkod (valfritt)', document.createElement('input'));
+    editBarcode.type = 'text'; editBarcode.inputMode = 'numeric'; editBarcode.maxLength = 14;
+    const editHint = document.createElement('small');
+    editHint.textContent = 'Skriv alla siffror i streckkoden, även inledande nollor. Affisch och kategori behålls.';
+    const editStatus = document.createElement('p');
+    editStatus.setAttribute('role', 'status'); editStatus.setAttribute('aria-live', 'polite');
+    const saveMovie = document.createElement('button');
+    saveMovie.type = 'submit'; saveMovie.textContent = 'Spara ändringar';
+    const cancelMovie = document.createElement('button');
+    cancelMovie.type = 'button'; cancelMovie.className = 'secondary'; cancelMovie.textContent = 'Avbryt';
+    function resetEditor() {
+      editTitle.value = movie.title;
+      editFormat.value = movie.format;
+      editBarcode.value = movie.barcode || '';
+      editStatus.textContent = '';
+    }
+    resetEditor();
+    cancelMovie.onclick = () => { resetEditor(); movieEdit.open = false; };
+    editForm.append(editHint, editStatus, saveMovie, cancelMovie);
+    editForm.onsubmit = event => {
+      event.preventDefault();
+      busy(editForm, async () => {
+        try {
+          if (!user || user.id !== cardOwner || generation !== cardGeneration) throw new Error('Öppna filmen igen efter att du loggat in.');
+          const title = editTitle.value.trim();
+          const format = editFormat.value;
+          const barcode = editBarcode.value.trim();
+          if (!title || [...title].length > 300) throw new Error('Skriv en titel med 1–300 tecken.');
+          if (!['DVD', 'Blu-ray', '4K'].includes(format)) throw new Error('Välj DVD, Blu-ray eller 4K.');
+          if (barcode && !validBarcode(barcode)) throw new Error('Streckkoden är ogiltig. Kontrollera siffrorna eller lämna fältet tomt.');
+          editStatus.textContent = 'Sparar ändringarna…';
+          const { data, error } = await db.from('movies').update({ title, format, barcode: barcode || null })
+            .eq('id', movie.id).eq('user_id', cardOwner).select('id');
+          if (generation !== cardGeneration) return;
+          if (error) throw error;
+          if (!data?.length) throw new Error('Filmen kunde inte ändras. Ladda om samlingen och försök igen.');
+          await loadMovies();
+          if (generation === cardGeneration) message('Filmens ändringar har sparats.');
+        } catch (error) {
+          if (generation !== cardGeneration) return;
+          editStatus.textContent = error.message || 'Ändringarna kunde inte sparas. Försök igen.';
+          throw error;
+        }
+      });
+    };
+    movieEdit.append(editSummary, editForm);
+    li.append(movieEdit);
     if (movie.barcode) {
       const code = document.createElement('small');
       code.className = 'barcode-label';

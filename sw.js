@@ -1,6 +1,6 @@
 // Cache ONLY this public, standalone offline page. Never cache the app's
 // navigation responses (which may contain auth URLs), APIs or private data.
-const CACHE = 'filmhyllan-offline-v7';
+const CACHE = 'filmhyllan-offline-v8';
 const OFFLINE = new URL('offline.html', self.registration.scope).href;
 self.addEventListener('install', event => {
   event.waitUntil((async () => {

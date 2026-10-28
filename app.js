@@ -1,6 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4';
-import { createScanner, validBarcode } from './scanner.js?v=7';
-import { createCoverReader } from './cover-reader.js?v=7';
+import { createScanner, validBarcode } from './scanner.js?v=8';
+import { createCoverReader } from './cover-reader.js?v=8';
 
 const db = createClient('https://ncaffkxwowxytabemdra.supabase.co', 'sb_publishable_TL6D3152G-tkGQXsmUlDAQ_Z1DhMdm8');
 const $ = id => document.getElementById(id);
@@ -8,6 +8,41 @@ let user = null;
 let generation = 0;
 let selectedMovie = null;
 let searchVersion = 0;
+let movieRows = [];
+function categoryText(value) {
+  return String(value || '').normalize('NFC').trim().replace(/\s+/g, ' ');
+}
+function categoryKey(value) { return categoryText(value).toLocaleLowerCase('sv'); }
+function cleanCategory(value) {
+  const text = categoryText(value);
+  if ([...text].length > 60) throw new Error('Kategorin får ha högst 60 tecken.');
+  if (!text) return null;
+  return movieRows.map(movie => categoryText(movie.category)).find(name => categoryKey(name) === categoryKey(text)) || text;
+}
+function updateCategoryOptions() {
+  const names = new Map();
+  for (const movie of movieRows) {
+    const name = categoryText(movie.category);
+    if (name && !names.has(categoryKey(name))) names.set(categoryKey(name), name);
+  }
+  const previous = $('category-filter').value || 'all';
+  $('category-filter').replaceChildren();
+  $('category-options').replaceChildren();
+  function option(value, label) {
+    const element = document.createElement('option');
+    element.value = value; element.textContent = label;
+    $('category-filter').append(element);
+  }
+  option('all', 'Alla kategorier');
+  option('none', 'Utan kategori');
+  for (const [key, name] of [...names.entries()].sort((a, b) => a[1].localeCompare(b[1], 'sv'))) {
+    option(`category:${key}`, name);
+    const suggestion = document.createElement('option');
+    suggestion.value = name;
+    $('category-options').append(suggestion);
+  }
+  $('category-filter').value = previous === 'none' || previous === 'all' || names.has(previous.slice(9)) ? previous : 'all';
+}
 const scanner = createScanner({
   video: $('scan-video'), panel: $('scan-panel'), startButton: $('scan-start'),
   onMessage: text => { $('scan-status').textContent = text; },
@@ -84,13 +119,21 @@ async function busy(form, action) {
 async function loadMovies() {
   if (!user) return;
   const current = generation;
-  const { data, error } = await db.from('movies').select('id,title,format,poster_path,barcode,media_type').eq('user_id', user.id).order('created_at', { ascending: false });
+  const { data, error } = await db.from('movies').select('id,title,format,poster_path,barcode,media_type,category').eq('user_id', user.id).order('created_at', { ascending: false });
   if (current !== generation) return;
   if (error) throw error;
+  movieRows = data;
+  updateCategoryOptions();
+  renderMovies();
+}
+function renderMovies() {
+  const filter = $('category-filter').value || 'all';
+  const visible = movieRows.filter(movie => filter === 'all' || (filter === 'none' ? !categoryText(movie.category) : `category:${categoryKey(movie.category)}` === filter));
   $('movies').replaceChildren();
-  $('empty').hidden = data.length !== 0;
-  $('count').textContent = `${data.length} filmer`;
-  for (const movie of data) {
+  $('empty').hidden = visible.length !== 0;
+  $('empty').textContent = movieRows.length ? 'Inga filmer i den här kategorin.' : 'Din hylla väntar på sin första film. Lägg till den ovan.';
+  $('count').textContent = filter === 'all' ? `${movieRows.length} filmer` : `${visible.length} av ${movieRows.length} filmer`;
+  for (const movie of visible) {
     const li = document.createElement('li');
     const title = document.createElement('h3');
     title.textContent = movie.title;
@@ -111,6 +154,42 @@ async function loadMovies() {
       });
     };
     li.append(poster(movie.poster_path, movie.title), title, format, remove);
+    const categoryBadge = document.createElement('p');
+    categoryBadge.className = 'category-badge';
+    categoryBadge.textContent = categoryText(movie.category) || 'Utan kategori';
+    const edit = document.createElement('details');
+    edit.className = 'category-edit';
+    const summary = document.createElement('summary');
+    summary.textContent = 'Ändra kategori';
+    const form = document.createElement('form');
+    const label = document.createElement('label');
+    label.textContent = 'Kategori';
+    const input = document.createElement('input');
+    input.type = 'text'; input.maxLength = 60; input.value = categoryText(movie.category);
+    input.setAttribute('list', 'category-options');
+    input.placeholder = 'Skriv nytt eller välj befintligt';
+    label.append(input);
+    const save = document.createElement('button');
+    save.type = 'submit'; save.className = 'secondary'; save.textContent = 'Spara kategori';
+    const hint = document.createElement('small');
+    hint.textContent = 'Lämna tomt för att ta bort kategorin.';
+    form.append(label, hint, save);
+    form.onsubmit = event => {
+      event.preventDefault();
+      busy(form, async () => {
+        if (!user) throw new Error('Logga in igen.');
+        const current = generation;
+        const category = cleanCategory(input.value);
+        const { data, error } = await db.from('movies').update({ category }).eq('id', movie.id).eq('user_id', user.id).select('id');
+        if (current !== generation) return;
+        if (error) throw error;
+        if (!data?.length) throw new Error('Filmen kunde inte ändras. Ladda om hyllan och försök igen.');
+        await loadMovies();
+        if (current === generation) message('Kategorin har sparats.');
+      });
+    };
+    edit.append(summary, form);
+    li.append(categoryBadge, edit);
     if (movie.barcode) {
       const code = document.createElement('small');
       code.className = 'barcode-label';
@@ -120,6 +199,7 @@ async function loadMovies() {
     $('movies').append(li);
   }
 }
+$('category-filter').onchange = renderMovies;
 async function showSession(session) {
   // Token refreshes must not clear an in-progress form or search.
   if (user && session?.user?.id === user.id) return;
@@ -128,6 +208,10 @@ async function showSession(session) {
   $('scan-status').textContent = '';
   $('barcode').value = '';
   generation++;
+  movieRows = [];
+  $('category').value = '';
+  $('category-filter').value = 'all';
+  updateCategoryOptions();
   searchVersion++;
   clearSelection();
   $('search-results').replaceChildren();
@@ -170,12 +254,14 @@ $('movie-form').onsubmit = event => {
     const barcode = $('barcode').value.trim();
     if (barcode && !validBarcode(barcode)) throw new Error('Kontrollera streckkoden. Skriv alla siffror, även inledande nollor.');
     const current = generation;
-    const { error } = await db.from('movies').insert({ title, format: $('format').value, user_id: user.id, tmdb_id: selectedMovie?.id || null, poster_path: selectedMovie?.poster_path || null, barcode: barcode || null, media_type: selectedMovie?.media_type || $('media-type').value });
+    const category = cleanCategory($('category').value);
+    const { error } = await db.from('movies').insert({ title, format: $('format').value, user_id: user.id, tmdb_id: selectedMovie?.id || null, poster_path: selectedMovie?.poster_path || null, barcode: barcode || null, media_type: selectedMovie?.media_type || $('media-type').value, category });
     if (current !== generation) return;
     if (error) throw error;
     $('movie-form').reset();
     clearSelection();
     $('scan-status').textContent = '';
+    $('category-filter').value = 'all';
     await loadMovies();
     message('Filmen har sparats.');
   });

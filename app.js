@@ -1,5 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4';
-import { createScanner, validBarcode } from './scanner.js?v=4';
+import { createScanner, validBarcode } from './scanner.js?v=5';
 
 const db = createClient('https://ncaffkxwowxytabemdra.supabase.co', 'sb_publishable_TL6D3152G-tkGQXsmUlDAQ_Z1DhMdm8');
 const $ = id => document.getElementById(id);
@@ -191,7 +191,9 @@ function searchTitles(body) {
       if (data?.error) throw new Error(data.error);
       if (!Array.isArray(data?.results)) throw new Error('Sökningen gav ett oväntat svar.');
       if (body.barcode) {
-        $('scan-status').textContent = data.product
+        $('scan-status').textContent = data.lookup_source === 'collection'
+          ? `Redan på din hylla: ${data.product.title}. Ingen ny kopia sparas om du inte väljer förslaget och klickar på Spara film.`
+          : data.product
           ? `Produkt: ${data.product.title} (källa: ${data.product.source}). Kontrollera att förslaget stämmer.`
           : data.lookup_message || 'Ingen produkttitel hittades. Sök på titeln manuellt.';
         if (data.query) $('query').value = data.query;
@@ -199,7 +201,8 @@ function searchTitles(body) {
       }
       $('search-status').textContent = data.results.length ? `${data.results.length} förslag. Välj rätt film eller serie nedan.` : data.lookup_message || 'Ingen träff. Prova en annan titel eller registrera manuellt nedan.';
       for (const movie of data.results) {
-        if (!Number.isInteger(movie.id) || typeof movie.title !== 'string') continue;
+        const savedResult = data.lookup_source === 'collection' && typeof movie.saved_id === 'string';
+        if ((!Number.isInteger(movie.id) && !savedResult) || typeof movie.title !== 'string') continue;
         const li = document.createElement('li');
         const name = document.createElement('h3');
         const year = /^\d{4}/.exec(movie.release_date || '')?.[0];

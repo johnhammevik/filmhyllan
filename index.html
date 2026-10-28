@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="sv">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#163d35">
+<title>Filmhyllan</title>
+<link rel="stylesheet" href="style.css">
+<script type="module" src="app.js"></script>
+<header><span class="brand">▤ Filmhyllan</span><span>Din egen lilla biograf.</span></header>
+<main>
+  <p class="eyebrow">DIN SAMLING, DIN HISTORIA</p>
+  <h1>Alla dina filmer.<br>En egen hylla.</h1>
+  <p class="intro">Samla dina DVD-, Blu-ray- och 4K-filmer på ett ställe.</p>
+  <p id="status" role="status" aria-live="polite">Ansluter…</p>
+  <section id="auth" hidden class="panel">
+    <h2>Välkommen till Filmhyllan</h2>
+    <form id="auth-form">
+      <label>E-post<input id="email" type="email" autocomplete="email" required></label>
+      <label>Lösenord<input id="password" type="password" autocomplete="current-password" minlength="8" required></label>
+      <div class="actions"><button type="submit">Logga in</button><button type="submit" name="signup" class="secondary">Skapa konto</button></div>
+    </form>
+    <p class="hint">Använd minst 8 tecken när du skapar konto. Du kan behöva bekräfta din e-post innan du loggar in.</p>
+  </section>
+  <section id="collection" hidden>
+    <div class="account"><span id="account-email"></span><button id="logout" class="secondary">Logga ut</button></div>
+    <form id="movie-form" class="panel">
+      <h2>Lägg till en film</h2>
+      <label>Filmtitel<input id="title" maxlength="300" required placeholder="Till exempel Interstellar"></label>
+      <label>Format<select id="format"><option>DVD</option><option>Blu-ray</option><option>4K</option></select></label>
+      <button>Spara film</button>
+    </form>
+    <div class="shelf-heading"><h2>Min filmhylla</h2><span id="count"></span></div>
+    <p id="empty" hidden>Din hylla väntar på sin första film. Lägg till den ovan.</p>
+    <ul id="movies"></ul>
+  </section>
+  <noscript>Aktivera JavaScript för att använda Filmhyllan.</noscript>
+</main>
+<footer>Filmhyllan · Första versionen · Manuell registrering</footer>
+</html>

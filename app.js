@@ -1,6 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4';
-import { createScanner, validBarcode } from './scanner.js?v=10';
-import { createCoverReader } from './cover-reader.js?v=10';
+import { createScanner, validBarcode } from './scanner.js?v=11';
 
 const db = createClient('https://ncaffkxwowxytabemdra.supabase.co', 'sb_publishable_TL6D3152G-tkGQXsmUlDAQ_Z1DhMdm8');
 const $ = id => document.getElementById(id);
@@ -48,7 +47,6 @@ const scanner = createScanner({
   onMessage: text => { $('scan-status').textContent = text; },
   onScan: code => {
     if (!user) return;
-    coverReader.reset();
     clearSelection();
     searchVersion++;
     $('title').value = '';
@@ -60,31 +58,9 @@ const scanner = createScanner({
     searchTitles({ barcode: code });
   },
 });
-const coverReader = createCoverReader({
-  onStart: () => {
-    if (!user) return false;
-    scanner.stop();
-    clearSelection();
-    searchVersion++;
-    $('title').value = '';
-    $('query').value = '';
-    $('search-results').replaceChildren();
-    $('search-status').textContent = '';
-    return $('barcode').value.trim();
-  },
-  onSearch: ({ title, barcode }) => {
-    if (!user) return;
-    clearSelection();
-    $('title').value = '';
-    $('barcode').value = barcode;
-    $('query').value = title;
-    $('search-status').scrollIntoView({ behavior: 'smooth', block: 'center' });
-    searchTitles({ query: title });
-  },
-});
-$('scan-start').onclick = () => { if (user) { coverReader.reset(); scanner.start(); } };
+$('scan-start').onclick = () => { if (user) scanner.start(); };
 $('scan-stop').onclick = () => { scanner.stop(); $('scan-status').textContent = 'Kameran är avstängd.'; };
-window.addEventListener('pagehide', () => { scanner.stop(); coverReader.reset(); });
+window.addEventListener('pagehide', () => scanner.stop());
 document.addEventListener('visibilitychange', () => { if (document.hidden) scanner.stop(); });
 function poster(path, title) {
   const box = document.createElement('div');
@@ -292,7 +268,6 @@ $('clear-collection-query').onclick = () => {
 async function showSession(session) {
   // Token refreshes must not clear an in-progress form or search.
   if (user && session?.user?.id === user.id) return;
-  coverReader.reset();
   scanner.stop();
   $('scan-status').textContent = '';
   $('barcode').value = '';
@@ -309,6 +284,8 @@ async function showSession(session) {
   $('search-status').textContent = '';
   $('search-form').reset();
   user = session?.user || null;
+  document.documentElement.dataset.signedIn = user ? 'true' : 'false';
+  window.dispatchEvent(new Event('filmhyllan-auth-changed'));
   $('movies').replaceChildren();
   $('count').textContent = '';
   $('empty').hidden = true;

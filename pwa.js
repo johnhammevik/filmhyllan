@@ -3,11 +3,13 @@
   const help = document.getElementById('install-help');
   const status = document.getElementById('install-status');
   const connection = document.getElementById('connection-status');
+  const panel = document.getElementById('install-panel');
   let promptEvent = null;
   function standalone() {
     return window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
   }
   function refresh() {
+    panel.hidden = document.documentElement.dataset.signedIn !== 'false' || standalone();
     button.hidden = !promptEvent || standalone();
     help.hidden = standalone();
     connection.hidden = navigator.onLine !== false;
@@ -42,6 +44,7 @@
   });
   window.addEventListener('online', refresh);
   window.addEventListener('offline', refresh);
+  window.addEventListener('filmhyllan-auth-changed', refresh);
   window.matchMedia('(display-mode: standalone)').addEventListener('change', refresh);
   refresh();
   if ('serviceWorker' in navigator && window.isSecureContext) {

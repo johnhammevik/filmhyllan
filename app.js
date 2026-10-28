@@ -4,6 +4,27 @@ const db = createClient('https://ncaffkxwowxytabemdra.supabase.co', 'sb_publisha
 const $ = id => document.getElementById(id);
 let user = null;
 let generation = 0;
+let selectedMovie = null;
+let searchVersion = 0;
+function poster(path, title) {
+  const box = document.createElement('div');
+  box.className = 'poster';
+  box.textContent = 'Affisch saknas';
+  if (typeof path === 'string' && /^\/[a-zA-Z0-9_-]+\.(jpg|png|webp)$/.test(path)) {
+    const img = document.createElement('img');
+    img.src = `https://image.tmdb.org/t/p/w342${path}`;
+    img.alt = `Affisch för ${title}`;
+    img.loading = 'lazy';
+    img.onerror = () => { box.textContent = 'Affischen kunde inte laddas'; };
+    box.replaceChildren(img);
+  }
+  return box;
+}
+function clearSelection() {
+  selectedMovie = null;
+  $('selection').hidden = true;
+  $('selected-info').replaceChildren();
+}
 function message(text, error = false) {
   $('status').textContent = text;
   $('status').classList.toggle('error', error);
@@ -18,7 +39,7 @@ async function busy(form, action) {
 async function loadMovies() {
   if (!user) return;
   const current = generation;
-  const { data, error } = await db.from('movies').select('id,title,format').eq('user_id', user.id).order('created_at', { ascending: false });
+  const { data, error } = await db.from('movies').select('id,title,format,poster_path').eq('user_id', user.id).order('created_at', { ascending: false });
   if (current !== generation) return;
   if (error) throw error;
   $('movies').replaceChildren();
@@ -44,12 +65,19 @@ async function loadMovies() {
         message('Filmen är borttagen.');
       });
     };
-    li.append(title, format, remove);
+    li.append(poster(movie.poster_path, movie.title), title, format, remove);
     $('movies').append(li);
   }
 }
 async function showSession(session) {
+  // Token refreshes must not clear an in-progress form or search.
+  if (user && session?.user?.id === user.id) return;
   generation++;
+  searchVersion++;
+  clearSelection();
+  $('search-results').replaceChildren();
+  $('search-status').textContent = '';
+  $('search-form').reset();
   user = session?.user || null;
   $('movies').replaceChildren();
   $('count').textContent = '';
@@ -84,11 +112,70 @@ $('movie-form').onsubmit = event => {
     if (!user) throw new Error('Logga in igen.');
     const title = $('title').value.trim();
     if (!title) throw new Error('Skriv en filmtitel.');
-    const { error } = await db.from('movies').insert({ title, format: $('format').value, user_id: user.id });
+    const current = generation;
+    const { error } = await db.from('movies').insert({ title, format: $('format').value, user_id: user.id, tmdb_id: selectedMovie?.id || null, poster_path: selectedMovie?.poster_path || null });
+    if (current !== generation) return;
     if (error) throw error;
     $('movie-form').reset();
+    clearSelection();
     await loadMovies();
     message('Filmen har sparats.');
+  });
+};
+$('clear-selection').onclick = () => {
+  clearSelection();
+  $('title').value = '';
+  $('title').focus();
+};
+$('title').addEventListener('input', clearSelection);
+$('search-form').onsubmit = event => {
+  event.preventDefault();
+  const current = ++searchVersion;
+  const accountGeneration = generation;
+  busy($('search-form'), async () => {
+    if (!user) throw new Error('Logga in för att söka.');
+    $('search-results').replaceChildren();
+    $('search-status').textContent = 'Söker efter filmer…';
+    try {
+      const { data, error } = await db.functions.invoke('tmdb-search', { body: { query: $('query').value.trim() } });
+      if (current !== searchVersion || accountGeneration !== generation) return;
+      if (error) {
+        let detail = '';
+        try { detail = (await error.context.json()).error || ''; } catch { /* Network or gateway error. */ }
+        throw new Error(detail || 'Sökningen misslyckades. Prova att logga ut och in igen. Du kan också registrera filmen manuellt.');
+      }
+      if (data?.error) throw new Error(data.error);
+      if (!Array.isArray(data?.results)) throw new Error('Sökningen gav ett oväntat svar.');
+      $('search-status').textContent = data.results.length ? `${data.results.length} filmförslag. Välj rätt film nedan.` : 'Ingen träff. Prova en annan titel eller registrera filmen manuellt nedan.';
+      for (const movie of data.results) {
+        if (!Number.isInteger(movie.id) || typeof movie.title !== 'string') continue;
+        const li = document.createElement('li');
+        const name = document.createElement('h3');
+        const year = /^\d{4}/.exec(movie.release_date || '')?.[0];
+        name.textContent = `${movie.title}${year ? ` (${year})` : ''}`;
+        const choose = document.createElement('button');
+        choose.type = 'button';
+        choose.textContent = 'Välj film';
+        choose.setAttribute('aria-label', `Välj ${name.textContent}`);
+        choose.onclick = () => {
+          selectedMovie = movie;
+          $('title').value = movie.title;
+          const label = document.createElement('p');
+          label.textContent = `Vald film: ${name.textContent}`;
+          $('selected-info').replaceChildren(poster(movie.poster_path, movie.title), label);
+          $('selection').hidden = false;
+          $('movie-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
+          $('format').focus({ preventScroll: true });
+          message('Kontrollera formatet och klicka på Spara film.');
+        };
+        li.append(poster(movie.poster_path, movie.title), name, choose);
+        $('search-results').append(li);
+      }
+    } catch (e) {
+      if (current === searchVersion && accountGeneration === generation) {
+        $('search-status').textContent = e.message;
+      }
+    }
   });
 };
 $('logout').onclick = () => busy($('collection'), async () => {
